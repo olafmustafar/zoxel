@@ -37,16 +37,16 @@ pub fn addVox(self: *Self, position: rl.Vector3, color: rl.Color) !void {
     }
 
     if (colorfound) |color_idx| {
-        try self.voxels.append(.{ .position = position, .color_idx = color_idx });
+        try self.voxels.append(.{ .position = position, .color_idx = color_idx + 1 });
     } else {
         try self.colors.append(color);
-        try self.voxels.append(.{ .position = position, .color_idx = self.colors.items.len - 1 });
+        try self.voxels.append(.{ .position = position, .color_idx = self.colors.items.len });
     }
 }
 
 pub fn writeFile(self: Self, filename: []const u8) !void {
     const file = try std.fs.cwd().createFile(filename, .{});
-    //header
+
     _ = try file.write("VOX ");
     try writeInt(file, 150);
 
@@ -94,10 +94,10 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
                 .tag = "XYZI",
                 .data = toCharArray(xyzi.items),
             },
-            // Chunk{
-            //     .tag = "RGBA",
-            //     .data = toCharArray(&rgba),
-            // },
+            Chunk{
+                .tag = "RGBA",
+                .data = toCharArray(&rgba),
+            },
         },
     };
     try writeChunk(file, mainchunk);
