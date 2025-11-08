@@ -1,0 +1,22 @@
+.{
+    .name = .zoxel,
+
+    .version = "0.0.0",
+
+    .fingerprint = 0x1069635f6f020378,
+
+    .minimum_zig_version = "0.14.1",
+
+    .dependencies = .{
+        .raylib = .{
+            .url = "git+https://github.com/raysan5/raylib.git#beabb1300d859b8503bdbec098956df3e3843b48",
+            .hash = "raylib-5.6.0-dev-whq8uGBk1QRFut3l5D_8MM05ygLUspH0OuXgGvfoQm_p",
+        },
+    },
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
