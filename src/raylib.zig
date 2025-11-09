@@ -45,15 +45,23 @@ pub fn cast(target_t: type, value: anytype) target_t {
     };
 }
 
-pub fn str2Color(rgb: []const u8) !rl.Color {
-    if (rgb.len != 6) return error.WrongFormat;
-
+pub fn str2Color(str: []const u8) !rl.Color {
+    var slice: []const u8 = str;
+    if (slice.len > 7) return error.WrongFormat;
+    if (slice.len == 7) slice = slice[1..7];
+    if (slice.len != 6) return error.WrongFormat;
+    const number = std.fmt.parseInt(u32, slice, 16) catch return error.WrongFormat;
+    const colors: [4]u8 = @bitCast(number);
     return rl.Color{
-        .r = try std.fmt.parseInt(u8, rgb[0..2], 16),
-        .g = try std.fmt.parseInt(u8, rgb[2..4], 16),
-        .b = try std.fmt.parseInt(u8, rgb[4..6], 16),
+        .r = colors[2],
+        .g = colors[1],
+        .b = colors[0],
         .a = 0xff,
     };
+}
+
+pub fn str2ColorComptime(comptime str: []const u8) rl.Color {
+    return comptime str2Color(str) catch |err| @compileError(@errorName(err));
 }
 
 pub fn vec3BoundingBox(haystack: []const rl.Vector3) [2]rl.Vector3 {
@@ -63,5 +71,16 @@ pub fn vec3BoundingBox(haystack: []const rl.Vector3) [2]rl.Vector3 {
         begin = rl.Vector3Min(begin, vox.pos);
         end = rl.Vector3Max(end, vox.pos);
     }
-    return .{begin, end};
+    return .{ begin, end };
 }
+
+// pub fn str2rgb(comptime color: [] const u8) rl.Color {
+//
+//     const split: [4]u8 = @bitCast(color);
+//     return rl.Color{
+//         .r = try std.fmt.parseInt(u8, rgb[0..2], 16),
+//         .g = try std.fmt.parseInt(u8, rgb[2..4], 16),
+//         .b = try std.fmt.parseInt(u8, rgb[4..6], 16),
+//         .a = 0xff,
+//     };
+// }

@@ -99,7 +99,7 @@ pub fn main() !void {
                     .cancelled => mode = .normal,
                     .finished => |command| {
                         mode = .normal;
-                        try editor.command(@ptrCast(command));
+                        editor.command(@ptrCast(command)) catch |e| ui.displayError(e);
                     },
                 }
             },

@@ -166,7 +166,7 @@ pub fn command(self: *Self, line: []const u8) !void {
         const rgb = it.next() orelse return CommandError.MissingArgument;
         const color = str2Color(rgb) catch return CommandError.WrongFormat;
         self.setColor(color);
-    } else if (std.mem.eql(u8, cmd[0..5], "store")) {
+    } else if (std.mem.eql(u8, cmd, "store")) {
         try self.buffers.append(try self.place_buffer.clone());
         try self.selectBuffer(self.buffers.items.len - 1);
     } else if (std.mem.eql(u8, cmd, "export")) {
@@ -179,6 +179,8 @@ pub fn command(self: *Self, line: []const u8) !void {
             try writer.addVox(vox.pos, vox.color);
         }
         try writer.writeFile(filename);
+    } else {
+        return CommandError.NotACommand;
     }
 }
 
