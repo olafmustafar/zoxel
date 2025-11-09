@@ -46,6 +46,7 @@ pub fn addVox(self: *Self, position: rl.Vector3, color: rl.Color) !void {
 
 pub fn writeFile(self: Self, filename: []const u8) !void {
     const file = try std.fs.cwd().createFile(filename, .{});
+    defer file.close();
 
     _ = try file.write("VOX ");
     try writeInt(file, 150);

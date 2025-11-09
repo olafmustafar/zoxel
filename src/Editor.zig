@@ -3,6 +3,7 @@ const rl = @import("raylib.zig").rl;
 const vec3 = @import("raylib.zig").vec3;
 const str2Color = @import("raylib.zig").str2Color;
 const VoxWriter = @import("VoxWriter.zig");
+const GltfWriter = @import("GltfWriter.zig");
 
 const Voxel = struct {
     pos: rl.Vector3,
@@ -172,13 +173,22 @@ pub fn command(self: *Self, line: []const u8) !void {
     } else if (std.mem.eql(u8, cmd, "export")) {
         const filename = it.next() orelse return CommandError.MissingArgument;
         const dot = std.mem.find(u8, filename, ".") orelse return CommandError.WrongFormat;
-        if (!std.mem.eql(u8, filename[dot..], ".vox")) return CommandError.NotImplemented;
-        var writer = VoxWriter.init(self.gpa);
-        defer writer.deinit();
-        for( self.blocks.items ) |vox| {
-            try writer.addVox(vox.pos, vox.color);
-        }
-        try writer.writeFile(filename);
+
+        if (std.mem.eql(u8, filename[dot..], ".vox")) {
+            var writer = VoxWriter.init(self.gpa);
+            defer writer.deinit();
+            for (self.blocks.items) |vox| {
+                try writer.addVox(vox.pos, vox.color);
+            }
+            try writer.writeFile(filename);
+        } else if (std.mem.eql(u8, filename[dot..], ".gltf")) {
+            var writer = GltfWriter.init(self.gpa);
+            defer writer.deinit();
+            for (self.blocks.items) |vox| {
+                try writer.addVox(vox.pos, vox.color);
+            }
+            try writer.writeFile(filename);
+        } else return CommandError.NotImplemented;
     } else {
         return CommandError.NotACommand;
     }
