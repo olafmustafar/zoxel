@@ -1,5 +1,6 @@
 const std = @import("std");
 const rl = @import("raylib.zig").rl;
+const cast = @import("raylib.zig").cast;
 
 const Self = @This();
 
@@ -45,7 +46,6 @@ pub fn addVox(self: *Self, position: rl.Vector3, color: rl.Color) !void {
 }
 
 pub fn writeFile(self: Self, filename: []const u8) !void {
-    _ = self;
     const file = try std.fs.cwd().createFile(filename, .{});
     defer file.close();
 
@@ -65,19 +65,15 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
         min: []const i32,
     };
 
+    const indices, const vertices = self.buildIndicesAndVertices();
+    defer indices.deinit();
+    defer vertices.deinit();
+
     const gltf = .{
         .asset = .{ .version = "2.0" },
         .scene = 0,
-        .scenes = [_]Scene{
-            .{
-                .nodes = &[_]i32{0},
-            },
-        },
-        .nodes = [_]Node{
-            .{
-                .mesh = 0,
-            },
-        },
+        .scenes = [_]Scene{.{ .nodes = &[_]i32{0} }},
+        .nodes = [_]Node{.{ .mesh = 0 }},
         .meshes = [_]Mesh{
             .{
                 .primitives = &[_]Primitive{
@@ -126,8 +122,41 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
     };
 
     var buffer: [0x1000]u8 = undefined;
-    const json = try std.fmt.bufPrint(&buffer, "{f}", .{std.json.fmt(gltf, .{
-        .whitespace = .indent_2
-    })});
+    const json = try std.fmt.bufPrint(&buffer, "{f}", .{std.json.fmt(gltf, .{ .whitespace = .indent_2 })});
     try file.writeAll(json);
+}
+
+fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u32), std.array_list.Managed([3]f32) } {
+    const indices = std.array_list.Managed([3]u32).init(self.gpa); //triangle indices
+    const vertex = std.array_list.Managed([3]f32).init(self.gpa); //vertex xyz
+
+    const box = voxBoundingBox(self.voxels.items);
+    const size = [3]u32{
+        @intFromFloat(@abs(box[0].x - box[1].x)),
+        @intFromFloat(@abs(box[0].y - box[1].y)),
+        @intFromFloat(@abs(box[0].z - box[1].z)),
+    };
+
+    const array3d = try std.array_list.Managed(bool).initCapacity(self.gpa, size[0] * size[1] * size[2]);
+    defer array3d.deinit();
+    for (array3d.items) |*v| v.* = false;
+
+    for (self.voxels.items) |vox| {
+        var idx = cast(u32, vox.position);
+        idx += cast(u32, vox.position.y) * size[0];
+        idx += cast(u32, vox.position.z) * size[0] * size[1];
+        array3d.items[idx] = true;
+    }
+
+    return .{ indices, vertex };
+}
+
+fn voxBoundingBox(haystack: []const Voxel) [2]rl.Vector3 {
+    var begin = haystack[0].position;
+    var end = rl.Vector3Add(haystack[0].position, rl.Vector3One());
+    for (haystack) |vox| {
+        begin = rl.Vector3Min(begin, vox.position);
+        end = rl.Vector3Max(end, rl.Vector3Add(vox.position, rl.Vector3One()));
+    }
+    return .{ begin, end };
 }
