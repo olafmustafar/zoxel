@@ -9,10 +9,26 @@ const Voxel = struct {
     color_idx: usize,
 };
 
-const Chunk = struct {
-    tag: []const u8,
-    data: []const u8,
-    children: []const Chunk = &.{},
+const Array3d = struct {
+    array: std.array_list.Managed(bool),
+    size: [3]usize,
+
+    fn init(alloc: std.mem.Allocator, size: [3]usize) !Array3d {
+        const array = .{ .array = try .initCapacity(alloc, size[0] * size[1] * size[2]), .size = size };
+        for (array.array.items) |*v| v.* = false;
+        return array;
+    }
+
+    fn deinit(self: Array3d) void {
+        self.array.deinit();
+    }
+
+    fn set(array: Array3d, x: usize, y: usize, z: usize, value: bool) void {
+        var idx = cast(usize, x);
+        idx += cast(usize, y) * array.size[0];
+        idx += cast(usize, z) * array.size[0] * array.size[1];
+        array.items[idx] = value;
+    }
 };
 
 voxels: std.array_list.Managed(Voxel),
@@ -65,7 +81,7 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
         min: []const i32,
     };
 
-    const indices, const vertices = self.buildIndicesAndVertices();
+    const indices, const vertices = buildIndicesAndVertices();
     defer indices.deinit();
     defer vertices.deinit();
 
@@ -127,8 +143,6 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
 }
 
 fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u32), std.array_list.Managed([3]f32) } {
-    const indices = std.array_list.Managed([3]u32).init(self.gpa); //triangle indices
-    const vertex = std.array_list.Managed([3]f32).init(self.gpa); //vertex xyz
 
     const box = voxBoundingBox(self.voxels.items);
     const size = [3]u32{
@@ -137,16 +151,15 @@ fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u32),
         @intFromFloat(@abs(box[0].z - box[1].z)),
     };
 
-    const array3d = try std.array_list.Managed(bool).initCapacity(self.gpa, size[0] * size[1] * size[2]);
+    const array3d = try Array3d.init(self.gpa, size);
     defer array3d.deinit();
-    for (array3d.items) |*v| v.* = false;
-
     for (self.voxels.items) |vox| {
-        var idx = cast(u32, vox.position);
-        idx += cast(u32, vox.position.y) * size[0];
-        idx += cast(u32, vox.position.z) * size[0] * size[1];
-        array3d.items[idx] = true;
+        array3d.set(vox.position.x, vox.position.y, vox.position.z, true);
     }
+
+    const indices = std.array_list.Managed([3]u32).init(self.gpa); //triangle indices
+    const vertex = std.array_list.Managed([3]f32).init(self.gpa); //vertex xyz
+    const visited = try std.array_list.Managed(bool).initCapacity(self.gpa, self.voxels.items.len);
 
     return .{ indices, vertex };
 }
