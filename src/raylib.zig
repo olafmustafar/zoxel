@@ -84,3 +84,39 @@ pub fn vec3BoundingBox(haystack: []const rl.Vector3) [2]rl.Vector3 {
 //         .a = 0xff,
 //     };
 // }
+
+fn Array3d(T: type) type {
+    return struct {
+        const Self = @This();
+        array: std.array_list.Managed(T),
+        size: [3]usize,
+
+        pub fn init(alloc: std.mem.Allocator, size: [3]usize, init_value: T) !Self {
+            const array = .{ .array = try .initCapacity(alloc, size[0] * size[1] * size[2]), .size = size };
+            for (array.array.items) |*v| v.* = init_value;
+            return array;
+        }
+
+        pub fn deinit(self: Self) void {
+            self.array.deinit();
+        }
+
+        pub fn get(array: Self, x: usize, y: usize, z: usize) ?T {
+            if (x >= 0 and x < array.size[0] and
+                y >= 0 and y < array.size[1] and
+                z >= 0 and z < array.size[2]) return null;
+
+            var idx = cast(usize, x);
+            idx += cast(usize, y) * array.size[0];
+            idx += cast(usize, z) * array.size[0] * array.size[1];
+            return array.items[idx];
+        }
+
+        pub fn set(array: Self, x: usize, y: usize, z: usize, value: T) void {
+            var idx = cast(usize, x);
+            idx += cast(usize, y) * array.size[0];
+            idx += cast(usize, z) * array.size[0] * array.size[1];
+            array.items[idx] = value;
+        }
+    };
+}

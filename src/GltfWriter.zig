@@ -1,34 +1,13 @@
 const std = @import("std");
 const rl = @import("raylib.zig").rl;
 const cast = @import("raylib.zig").cast;
+const Array3d = @import("raylib.zig").Array3d;
 
 const Self = @This();
 
 const Voxel = struct {
     position: rl.Vector3,
     color_idx: usize,
-};
-
-const Array3d = struct {
-    array: std.array_list.Managed(bool),
-    size: [3]usize,
-
-    fn init(alloc: std.mem.Allocator, size: [3]usize) !Array3d {
-        const array = .{ .array = try .initCapacity(alloc, size[0] * size[1] * size[2]), .size = size };
-        for (array.array.items) |*v| v.* = false;
-        return array;
-    }
-
-    fn deinit(self: Array3d) void {
-        self.array.deinit();
-    }
-
-    fn set(array: Array3d, x: usize, y: usize, z: usize, value: bool) void {
-        var idx = cast(usize, x);
-        idx += cast(usize, y) * array.size[0];
-        idx += cast(usize, z) * array.size[0] * array.size[1];
-        array.items[idx] = value;
-    }
 };
 
 voxels: std.array_list.Managed(Voxel),
@@ -62,6 +41,7 @@ pub fn addVox(self: *Self, position: rl.Vector3, color: rl.Color) !void {
 }
 
 pub fn writeFile(self: Self, filename: []const u8) !void {
+    _ = self; // autofix
     const file = try std.fs.cwd().createFile(filename, .{});
     defer file.close();
 
@@ -143,7 +123,6 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
 }
 
 fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u32), std.array_list.Managed([3]f32) } {
-
     const box = voxBoundingBox(self.voxels.items);
     const size = [3]u32{
         @intFromFloat(@abs(box[0].x - box[1].x)),
@@ -151,16 +130,56 @@ fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u32),
         @intFromFloat(@abs(box[0].z - box[1].z)),
     };
 
-    const array3d = try Array3d.init(self.gpa, size);
-    defer array3d.deinit();
-    for (self.voxels.items) |vox| {
-        array3d.set(vox.position.x, vox.position.y, vox.position.z, true);
+    const voxels = try Array3d(bool).init(self.gpa, size, false);
+    defer voxels.deinit();
+    const vertexes = try Array3d(?u32).init(self.gpa, rl.Vector3Sum(size, rl.Vector3One()), null);
+    defer vertexes.deinit();
+
+    for (self.voxels.items) |vox|
+        voxels.set(vox.position.x, vox.position.y, vox.position.z, true);
+
+    var vert_idx = 0;
+    for (0..vertexes.size[2].len) |z| {
+        for (0..vertexes.size[1].len) |y| {
+            for (0..vertexes.size[0].len) |x| {
+                if (canPlaceVertex(voxels, x, y, z)) {
+                    vertexes.set(x, y, z, vert_idx);
+                    vert_idx += 1;
+                }
+            }
+        }
     }
 
-    const indices = std.array_list.Managed([3]u32).init(self.gpa); //triangle indices
-    const vertex = std.array_list.Managed([3]f32).init(self.gpa); //vertex xyz
-    const visited = try std.array_list.Managed(bool).initCapacity(self.gpa, self.voxels.items.len);
+    const indices = std.array_list.Managed([4]u32).init(self.gpa); //quad indices
+    for (0..voxels.size[2].len) |z| {
+        for (0..voxels.size[1].len) |y| {
+            for (0..voxels.size[0].len) |x| {
+                const conditions = [_]struct { condition: [3]u8, face: [4][3]u8 }{
+                    .{ .condition = .{ -1, 0, 0 }, .face = .{ .{ -1, 0, 0 }, .{ 0, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 }, .{ 0, 1, 1 } } },
+                    .{ .condition = .{ 0, -1, 0 }, .face = .{ .{ 0, -1, 0 }, .{ 0, 0, 0 }, .{ 1, 0, 0 }, .{ 0, 0, 1 }, .{ 1, 0, 1 } } },
+                    .{ .condition = .{ 0, 0, -1 }, .face = .{ .{ 0, 0, -1 }, .{ 0, 0, 0 }, .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 1, 1, 0 } } },
+                    .{ .condition = .{ 1, 0, 0 }, .face = .{ .{ 1, 0, 0 }, .{ 1, 0, 0 }, .{ 1, 1, 0 }, .{ 1, 0, 1 }, .{ 1, 1, 1 } } },
+                    .{ .condition = .{ 0, 1, 0 }, .face = .{ .{ 0, 1, 0 }, .{ 0, 1, 0 }, .{ 1, 1, 0 }, .{ 0, 1, 1 }, .{ 1, 1, 1 } } },
+                    .{ .condition = .{ 0, 0, 1 }, .face = .{ .{ 0, 0, 1 }, .{ 0, 0, 1 }, .{ 1, 0, 1 }, .{ 0, 1, 1 }, .{ 1, 1, 1 } } },
+                };
 
+                for (conditions) |cond| {
+                    const condition = cond.condition;
+                    const face = cond.face;
+                    if (voxels.get(x + condition[0], y + condition[1], z + condition[2]) == null) {
+                        indices.append(.{
+                            vertexes.get(x + face[0][0], y + face[0][1], z + face[0][2]),
+                            vertexes.get(x + face[1][0], y + face[1][1], z + face[1][2]),
+                            vertexes.get(x + face[2][0], y + face[2][1], z + face[2][2]),
+                            vertexes.get(x + face[3][0], y + face[3][1], z + face[3][2]),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    const vertex = std.array_list.Managed([3]f32).init(self.gpa); //vertex xyz
     return .{ indices, vertex };
 }
 
@@ -172,4 +191,22 @@ fn voxBoundingBox(haystack: []const Voxel) [2]rl.Vector3 {
         end = rl.Vector3Max(end, rl.Vector3Add(vox.position, rl.Vector3One()));
     }
     return .{ begin, end };
+}
+
+fn canPlaceVertex(voxels: Array3d(bool), x: usize, y: usize, z: usize) bool {
+    const neighbors = [_][3]i32{
+        .{ 0, 0, 0 },   .{ -1, 0, 0 },  .{ 0, -1, 0 },  .{ 0, 0, -1 },
+        .{ -1, -1, 0 }, .{ 0, -1, -1 }, .{ -1, 0, -1 }, .{ -1, -1, -1 },
+    };
+    var hasAtLeastOne = false;
+    var isSurrounded = true;
+    for (neighbors) |pos| {
+        if (voxels.get(x + pos[0], y + pos[1], z + pos[2]) == true) {
+            hasAtLeastOne = true;
+        } else {
+            isSurrounded = false;
+        }
+    }
+
+    return hasAtLeastOne and !isSurrounded;
 }
