@@ -33,7 +33,7 @@ pub fn cast(target_t: type, value: anytype) target_t {
             else => @compileError("no valid cast found"),
         },
         .int => switch (@typeInfo(value_t)) {
-            .float => return @floatFromInt(value),
+            .float => return @intFromFloat(value),
             .int => return @intCast(value),
             .bool => return @intFromBool(value),
             else => @compileError("no valid cast found"),
@@ -85,38 +85,39 @@ pub fn vec3BoundingBox(haystack: []const rl.Vector3) [2]rl.Vector3 {
 //     };
 // }
 
-fn Array3d(T: type) type {
+pub fn Array3d(T: type) type {
     return struct {
         const Self = @This();
-        array: std.array_list.Managed(T),
+        array: []T,
         size: [3]usize,
+        alloc: std.mem.Allocator,
 
         pub fn init(alloc: std.mem.Allocator, size: [3]usize, init_value: T) !Self {
-            const array = .{ .array = try .initCapacity(alloc, size[0] * size[1] * size[2]), .size = size };
-            for (array.array.items) |*v| v.* = init_value;
-            return array;
+            const self = Self{ .array = try alloc.alloc(T, size[0] * size[1] * size[2]), .size = size, .alloc = alloc };
+            for (self.array) |*v| v.* = init_value;
+            return self;
         }
 
         pub fn deinit(self: Self) void {
-            self.array.deinit();
+            self.alloc.free(self.array);
         }
 
-        pub fn get(array: Self, x: usize, y: usize, z: usize) ?T {
-            if (x >= 0 and x < array.size[0] and
-                y >= 0 and y < array.size[1] and
-                z >= 0 and z < array.size[2]) return null;
+        pub fn get(self: Self, x: i32, y: i32, z: i32) ?T {
+            if (x < 0 or x >= self.size[0] or
+                y < 0 or y >= self.size[1] or
+                z < 0 or z >= self.size[2]) return null;
 
             var idx = cast(usize, x);
-            idx += cast(usize, y) * array.size[0];
-            idx += cast(usize, z) * array.size[0] * array.size[1];
-            return array.items[idx];
+            idx += cast(usize, y) * self.size[0];
+            idx += cast(usize, z) * self.size[0] * self.size[1];
+            return self.array[idx];
         }
 
-        pub fn set(array: Self, x: usize, y: usize, z: usize, value: T) void {
+        pub fn set(self: Self, x: usize, y: usize, z: usize, value: T) void {
             var idx = cast(usize, x);
-            idx += cast(usize, y) * array.size[0];
-            idx += cast(usize, z) * array.size[0] * array.size[1];
-            array.items[idx] = value;
+            idx += cast(usize, y) * self.size[0];
+            idx += cast(usize, z) * self.size[0] * self.size[1];
+            self.array[idx] = value;
         }
     };
 }
