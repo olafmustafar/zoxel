@@ -57,27 +57,42 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
         componentType: i32,
         count: i32,
         type: []const u8,
-        max: []const i32,
-        min: []const i32,
+        max: []const f32,
+        min: []const f32,
     };
 
-    const indices, const vertices = try self.buildIndicesAndVertices();
+    const indices, const vertices = try self.buildIndicesAndVerticesMock();
     defer indices.deinit();
     defer vertices.deinit();
 
+    var indices_max: u32 = 0;
+    var indices_min: u32 = std.math.maxInt(u32);
+    for (indices.items) |i| {
+        indices_max = @max(indices_max, i[0], i[1], i[2]);
+        indices_min = @min(indices_min, i[0], i[1], i[2]);
+    }
+    var vertices_max = [3]f32{ 0, 0, 0 };
+    for (vertices.items) |i| {
+        vertices_max[0] = @max(vertices_max[0], i[0]);
+        vertices_max[1] = @max(vertices_max[1], i[1]);
+        vertices_max[2] = @max(vertices_max[2], i[2]);
+    }
+
     const indices_u8 = @as([]u8, @ptrCast(indices.items));
     const vertices_u8 = @as([]u8, @ptrCast(vertices.items));
-    const buffer = try self.gpa.alloc(u8, indices_u8.len + vertices_u8.len);
+    const vertices_extra_offset = @mod(indices_u8.len, @sizeOf(f32));
+    const buffer = try self.gpa.alloc(u8, indices_u8.len + vertices_extra_offset + vertices_u8.len);
     defer self.gpa.free(buffer);
 
     for (buffer) |*v| v.* = 0;
-    @memcpy(buffer[0..vertices_u8.len], vertices_u8);
+    @memcpy(buffer[0..indices_u8.len], indices_u8);
+    @memcpy(buffer[indices_u8.len + vertices_extra_offset ..  indices_u8.len + vertices_extra_offset + vertices_u8.len], vertices_u8);
 
     var buffer_b64_writer = std.Io.Writer.Allocating.init(self.gpa);
     defer buffer_b64_writer.deinit();
 
     try buffer_b64_writer.writer.print("data:application/octet-stream;base64,", .{});
-    try std.base64.url_safe.Encoder.encodeWriter(&buffer_b64_writer.writer, buffer);
+    try std.base64.standard.Encoder.encodeWriter(&buffer_b64_writer.writer, buffer);
 
     var buffer_b64 = buffer_b64_writer.toArrayList();
     defer buffer_b64.deinit(self.gpa);
@@ -111,28 +126,31 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
             },
             .{
                 .buffer = 0,
-                .byteOffset = indices_u8.len + 2,
+                .byteOffset = indices_u8.len + vertices_extra_offset,
                 .byteLength = vertices_u8.len,
                 .target = 34962,
             },
         },
-        .accessors = [_]Accessor{ .{
-            .bufferView = 0,
-            .byteOffset = 0,
-            .componentType = 5123,
-            .count = 3,
-            .type = "SCALAR",
-            .max = &[_]i32{2},
-            .min = &[_]i32{0},
-        }, .{
-            .bufferView = 1,
-            .byteOffset = 0,
-            .componentType = 5126,
-            .count = 3,
-            .type = "VEC3",
-            .max = &[_]i32{ 1.0, 1.0, 0.0 },
-            .min = &[_]i32{ 0.0, 0.0, 0.0 },
-        } },
+        .accessors = [_]Accessor{
+            .{
+                .bufferView = 0,
+                .byteOffset = 0,
+                .componentType = 5123, //unsigned short 16
+                .count = 3,
+                .type = "SCALAR",
+                .max = &[_]f32{@floatFromInt(indices_max)},
+                .min = &[_]f32{@floatFromInt(indices_min)},
+            },
+            .{
+                .bufferView = 1,
+                .byteOffset = 0,
+                .componentType = 5126, //signed float 32
+                .count = 3,
+                .type = "VEC3",
+                .max = &vertices_max,
+                .min = &[_]f32{ 0.0, 0.0, 0.0 },
+            },
+        },
     };
 
     var buffer2: [0x1000]u8 = undefined;
@@ -221,6 +239,16 @@ fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u32),
     }
 
     return .{ indices, vertex };
+}
+
+fn buildIndicesAndVerticesMock(self: Self) !struct { std.array_list.Managed([3]u16), std.array_list.Managed([3]f32) } {
+    var indices = std.array_list.Managed([3]u16).init(self.gpa); //triangle indices
+    var vertices = std.array_list.Managed([3]f32).init(self.gpa); //vertex xyz
+    try indices.append(.{ 0, 1, 2 });
+    try vertices.append(.{ 0.0, 0.0, 0.0 });
+    try vertices.append(.{ 0.0, 1.0, 0.0 });
+    try vertices.append(.{ 1.0, 0.0, 0.0 });
+    return .{ indices, vertices };
 }
 
 fn voxBoundingBox(haystack: []const Voxel) [2]rl.Vector3 {
