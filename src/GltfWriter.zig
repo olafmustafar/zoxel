@@ -61,7 +61,7 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
         min: []const f32,
     };
 
-    const indices, const vertices = try self.buildIndicesAndVerticesMock();
+    const indices, const vertices = try self.buildIndicesAndVertices();
     defer indices.deinit();
     defer vertices.deinit();
 
@@ -246,8 +246,8 @@ fn buildIndicesAndVerticesMock(self: Self) !struct { std.array_list.Managed([3]u
     var vertices = std.array_list.Managed([3]f32).init(self.gpa); //vertex xyz
     try indices.append(.{ 0, 1, 2 });
     try vertices.append(.{ 0.0, 0.0, 0.0 });
-    try vertices.append(.{ 0.0, 1.0, 0.0 });
     try vertices.append(.{ 1.0, 0.0, 0.0 });
+    try vertices.append(.{ 0.0, 1.0, 0.0 });
     return .{ indices, vertices };
 }
 
