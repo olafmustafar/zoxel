@@ -64,6 +64,8 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
     const indices, const vertices = try self.buildIndicesAndVertices();
     defer indices.deinit();
     defer vertices.deinit();
+    std.debug.print("indices: {any}\n", .{indices.items});
+    std.debug.print("vertices: {any}\n", .{vertices.items});
 
     var indices_max: u32 = 0;
     var indices_min: u32 = std.math.maxInt(u32);
@@ -166,7 +168,7 @@ fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u32),
         @intFromFloat(@abs(box[1].z - box[0].z)),
     };
 
-    const voxels = try Array3d(bool).init(self.gpa, size, false);
+    const voxels = try Array3d(bool).init(self.gpa, size);
     defer voxels.deinit();
     for (self.voxels.items) |vox| {
         voxels.set(
@@ -177,21 +179,9 @@ fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u32),
         );
     }
 
-    const vertices = try Array3d(?u32).init(self.gpa, .{ size[0] + 1, size[1] + 1, size[2] + 1 }, null);
+    const vertices = try Array3d(u32).init(self.gpa, .{ size[0] + 1, size[1] + 1, size[2] + 1 });
     defer vertices.deinit();
     var vert_idx: u32 = 0;
-    for (0..vertices.size[2]) |z| {
-        for (0..vertices.size[1]) |y| {
-            for (0..vertices.size[0]) |x| {
-                if (canPlaceVertice(voxels, @intCast(x), @intCast(y), @intCast(z))) {
-                    vertices.set(x, y, z, vert_idx);
-                    vert_idx += 1;
-                    std.debug.print("vertice: {} {} {}\n", .{ x, y, z });
-                }
-            }
-        }
-    }
-
     var indices = std.array_list.Managed([3]u32).init(self.gpa); //triangle indices
     for (0..voxels.size[2]) |z| {
         for (0..voxels.size[1]) |y| {
@@ -213,19 +203,32 @@ fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u32),
                     const cond = face_condition.cond;
                     const face = face_condition.face;
                     if (voxels.get(xi + cond[0], yi + cond[1], zi + cond[2]) == null) {
-                        std.debug.print("using: {} {} {}\n", .{ xi + face[0][0], yi + face[0][1], zi + face[0][2] });
-                        std.debug.print("using: {} {} {}\n", .{ xi + face[1][0], yi + face[1][1], zi + face[1][2] });
-                        std.debug.print("using: {} {} {}\n", .{ xi + face[2][0], yi + face[2][1], zi + face[2][2] });
-                        try indices.append(.{
-                            vertices.get(xi + face[0][0], yi + face[0][1], zi + face[0][2]).?.?,
-                            vertices.get(xi + face[1][0], yi + face[1][1], zi + face[1][2]).?.?,
-                            vertices.get(xi + face[2][0], yi + face[2][1], zi + face[2][2]).?.?,
-                        });
-                        // try indices.append(.{
-                        // vertices.get(xi + face[1][0], yi + face[1][1], zi + face[1][2]).?.?,
-                        //     vertices.get(xi + face[2][0], yi + face[2][1], zi + face[2][2]).?.?,
-                        //     vertices.get(xi + face[3][0], yi + face[3][1], zi + face[3][2]).?.?,
-                        // });
+                        const ind = [_][3][3]i32{
+                            .{ //face 1 |/
+                                .{ xi + face[0][0], yi + face[0][1], zi + face[0][2] },
+                                .{ xi + face[2][0], yi + face[2][1], zi + face[2][2] },
+                                .{ xi + face[1][0], yi + face[1][1], zi + face[1][2] },
+                            },
+                            .{ //face 2  /|
+                                .{ xi + face[1][0], yi + face[1][1], zi + face[1][2] },
+                                .{ xi + face[2][0], yi + face[2][1], zi + face[2][2] },
+                                .{ xi + face[3][0], yi + face[3][1], zi + face[3][2] },
+                            },
+                        };
+
+                        for (ind) |ind2| {
+                            for (ind2) |v| {
+                                if (vertices.get(v[0], v[1], v[2]) == null) {
+                                    vertices.setI32(v[0], v[1], v[2], vert_idx);
+                                    vert_idx += 1;
+                                }
+                            }
+                            try indices.append(.{
+                                vertices.get(ind2[0][0], ind2[0][1], ind2[0][2]).?,
+                                vertices.get(ind2[1][0], ind2[1][1], ind2[1][2]).?,
+                                vertices.get(ind2[2][0], ind2[2][1], ind2[2][2]).?,
+                            });
+                        }
                     }
                 }
             }
@@ -264,22 +267,4 @@ fn voxBoundingBox(haystack: []const Voxel) [2]rl.Vector3 {
         end = rl.Vector3Max(end, rl.Vector3Add(vox.position, rl.Vector3One()));
     }
     return .{ begin, end };
-}
-
-fn canPlaceVertice(voxels: Array3d(bool), x: i32, y: i32, z: i32) bool {
-    const neighbors = [_][3]i32{
-        .{ 0, 0, 0 }, .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 },
-        .{ 1, 1, 0 }, .{ 0, 1, 1 }, .{ 1, 0, 1 }, .{ 1, 1, 1 },
-    };
-    var hasNeighbors = false;
-    var isSurrounded = true;
-    for (neighbors) |pos| {
-        if (voxels.get(x + pos[0] - 1, y + pos[1] - 1, z + pos[2] - 1) == true) {
-            hasNeighbors = true;
-        } else {
-            isSurrounded = false;
-        }
-    }
-
-    return hasNeighbors and !isSurrounded;
 }

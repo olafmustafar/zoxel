@@ -88,13 +88,13 @@ pub fn vec3BoundingBox(haystack: []const rl.Vector3) [2]rl.Vector3 {
 pub fn Array3d(T: type) type {
     return struct {
         const Self = @This();
-        array: []T,
+        array: []?T,
         size: [3]usize,
         alloc: std.mem.Allocator,
 
-        pub fn init(alloc: std.mem.Allocator, size: [3]usize, init_value: T) !Self {
-            const self = Self{ .array = try alloc.alloc(T, size[0] * size[1] * size[2]), .size = size, .alloc = alloc };
-            for (self.array) |*v| v.* = init_value;
+        pub fn init(alloc: std.mem.Allocator, size: [3]usize) !Self {
+            const self = Self{ .array = try alloc.alloc(?T, size[0] * size[1] * size[2]), .size = size, .alloc = alloc };
+            for (self.array) |*v| v.* = null;
             return self;
         }
 
@@ -113,7 +113,14 @@ pub fn Array3d(T: type) type {
             return self.array[idx];
         }
 
-        pub fn set(self: Self, x: usize, y: usize, z: usize, value: T) void {
+        pub fn setI32(self: Self, x: i32, y: i32, z: i32, value: ?T) void {
+            var idx = cast(usize, x);
+            idx += cast(usize, y) * self.size[0];
+            idx += cast(usize, z) * self.size[0] * self.size[1];
+            self.array[idx] = value;
+        }
+
+        pub fn set(self: Self, x: usize, y: usize, z: usize, value: ?T) void {
             var idx = cast(usize, x);
             idx += cast(usize, y) * self.size[0];
             idx += cast(usize, z) * self.size[0] * self.size[1];
