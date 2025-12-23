@@ -138,7 +138,7 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
                 .bufferView = 0,
                 .byteOffset = 0,
                 .componentType = 5123, //unsigned short 16
-                .count = 3,
+                .count = @intCast(indices.items.len * 3),
                 .type = "SCALAR",
                 .max = &[_]f32{@floatFromInt(indices_max)},
                 .min = &[_]f32{@floatFromInt(indices_min)},
@@ -147,7 +147,7 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
                 .bufferView = 1,
                 .byteOffset = 0,
                 .componentType = 5126, //signed float 32
-                .count = 3,
+                .count = @intCast(vertices.items.len),
                 .type = "VEC3",
                 .max = &vertices_max,
                 .min = &[_]f32{ 0.0, 0.0, 0.0 },
@@ -160,7 +160,7 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
     try file.writeAll(json);
 }
 
-fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u32), std.array_list.Managed([3]f32) } {
+fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u16), std.array_list.Managed([3]f32) } {
     const box = voxBoundingBox(self.voxels.items);
     const size = [3]usize{
         @intFromFloat(@abs(box[1].x - box[0].x)),
@@ -179,10 +179,11 @@ fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u32),
         );
     }
 
-    const vertices = try Array3d(u32).init(self.gpa, .{ size[0] + 1, size[1] + 1, size[2] + 1 });
+    const vertices = try Array3d(u16).init(self.gpa, .{ size[0] + 1, size[1] + 1, size[2] + 1 });
     defer vertices.deinit();
-    var vert_idx: u32 = 0;
-    var indices = std.array_list.Managed([3]u32).init(self.gpa); //triangle indices
+    var vertices_flat = std.array_list.Managed([3]f32).init(self.gpa); //vertex xyz
+    var vert_idx: u16 = 0;
+    var indices = std.array_list.Managed([3]u16).init(self.gpa); //triangle indices
     for (0..voxels.size[2]) |z| {
         for (0..voxels.size[1]) |y| {
             for (0..voxels.size[0]) |x| {
@@ -191,28 +192,28 @@ fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u32),
                 const zi = @as(i32, @intCast(z));
 
                 const face_conditions = [_]struct { cond: [3]i32, face: [4][3]i32 }{
-                    .{ .cond = .{ -1, 0, 0 }, .face = .{ .{ 0, 0, 0 }, .{ 0, 1, 0 }, .{ 0, 0, 1 }, .{ 0, 1, 1 } } },
-                    // .{ .cond = .{ 0, -1, 0 }, .face = .{ .{ 0, 0, 0 }, .{ 1, 0, 0 }, .{ 0, 0, 1 }, .{ 1, 0, 1 } } },
-                    // .{ .cond = .{ 0, 0, -1 }, .face = .{ .{ 0, 0, 0 }, .{ 1, 0, 0 }, .{ 0, 1, 0 }, .{ 1, 1, 0 } } },
-                    // .{ .cond = .{ 1, 0, 0 }, .face = .{ .{ 1, 0, 0 }, .{ 1, 1, 0 }, .{ 1, 0, 1 }, .{ 1, 1, 1 } } },
-                    // .{ .cond = .{ 0, 1, 0 }, .face = .{ .{ 0, 1, 0 }, .{ 1, 1, 0 }, .{ 0, 1, 1 }, .{ 1, 1, 1 } } },
-                    // .{ .cond = .{ 0, 0, 1 }, .face = .{ .{ 0, 0, 1 }, .{ 1, 0, 1 }, .{ 0, 1, 1 }, .{ 1, 1, 1 } } },
+                    .{ .cond = .{ -1, 0, 0 }, .face = .{ .{ 0, 0, 0 }, .{ 0, 0, 1 }, .{ 0, 1, 0 }, .{ 0, 1, 1 } } },
+                    .{ .cond = .{ 0, -1, 0 }, .face = .{ .{ 0, 0, 0 }, .{ 1, 0, 0 }, .{ 0, 0, 1 }, .{ 1, 0, 1 } } },
+                    .{ .cond = .{ 0, 0, -1 }, .face = .{ .{ 0, 0, 0 }, .{ 0, 1, 0 }, .{ 1, 0, 0 }, .{ 1, 1, 0 } } },
+                    .{ .cond = .{ 1, 0, 0 }, .face = .{ .{ 1, 0, 0 }, .{ 1, 1, 0 }, .{ 1, 0, 1 }, .{ 1, 1, 1 } } },
+                    .{ .cond = .{ 0, 1, 0 }, .face = .{ .{ 0, 1, 0 }, .{ 0, 1, 1 }, .{ 1, 1, 0 }, .{ 1, 1, 1 } } },
+                    .{ .cond = .{ 0, 0, 1 }, .face = .{ .{ 0, 0, 1 }, .{ 1, 0, 1 }, .{ 0, 1, 1 }, .{ 1, 1, 1 } } },
                 };
 
                 for (face_conditions) |face_condition| {
                     const cond = face_condition.cond;
                     const face = face_condition.face;
-                    if (voxels.get(xi + cond[0], yi + cond[1], zi + cond[2]) == null) {
+                    if (voxels.get(xi + cond[0], yi + cond[1], zi + cond[2]) == null and voxels.get(xi, yi, zi) != null) {
                         const ind = [_][3][3]i32{
                             .{ //face 1 |/
                                 .{ xi + face[0][0], yi + face[0][1], zi + face[0][2] },
-                                .{ xi + face[2][0], yi + face[2][1], zi + face[2][2] },
                                 .{ xi + face[1][0], yi + face[1][1], zi + face[1][2] },
+                                .{ xi + face[2][0], yi + face[2][1], zi + face[2][2] },
                             },
                             .{ //face 2  /|
-                                .{ xi + face[1][0], yi + face[1][1], zi + face[1][2] },
-                                .{ xi + face[2][0], yi + face[2][1], zi + face[2][2] },
                                 .{ xi + face[3][0], yi + face[3][1], zi + face[3][2] },
+                                .{ xi + face[2][0], yi + face[2][1], zi + face[2][2] },
+                                .{ xi + face[1][0], yi + face[1][1], zi + face[1][2] },
                             },
                         };
 
@@ -220,6 +221,7 @@ fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u32),
                             for (ind2) |v| {
                                 if (vertices.get(v[0], v[1], v[2]) == null) {
                                     vertices.setI32(v[0], v[1], v[2], vert_idx);
+                                    try vertices_flat.append(.{ @floatFromInt(v[0]), @floatFromInt(v[1]), @floatFromInt(v[2]) });
                                     vert_idx += 1;
                                 }
                             }
@@ -235,17 +237,6 @@ fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u32),
         }
     }
 
-    var vertices_flat = std.array_list.Managed([3]f32).init(self.gpa); //vertex xyz
-    for (0..vertices.size[2]) |z| {
-        for (0..vertices.size[1]) |y| {
-            for (0..vertices.size[0]) |x| {
-                if (vertices.get(@intCast(x), @intCast(y), @intCast(z))) |_| {
-                    try vertices_flat.append(.{ @floatFromInt(x), @floatFromInt(y), @floatFromInt(z) });
-                }
-            }
-        }
-    }
-
     return .{ indices, vertices_flat };
 }
 
@@ -253,9 +244,11 @@ fn buildIndicesAndVerticesMock(self: Self) !struct { std.array_list.Managed([3]u
     var indices = std.array_list.Managed([3]u16).init(self.gpa); //triangle indices
     var vertices = std.array_list.Managed([3]f32).init(self.gpa); //vertex xyz
     try indices.append(.{ 0, 1, 2 });
+    try indices.append(.{ 3, 2, 1 });
     try vertices.append(.{ 0.0, 0.0, 0.0 });
     try vertices.append(.{ 1.0, 0.0, 0.0 });
     try vertices.append(.{ 0.0, 1.0, 0.0 });
+    try vertices.append(.{ 1.0, 1.0, 0.0 });
     return .{ indices, vertices };
 }
 
