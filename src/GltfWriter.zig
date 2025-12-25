@@ -11,6 +11,38 @@ const Voxel = struct {
     color_idx: usize,
 };
 
+const Primitives = struct {
+    indices: std.array_list.Managed(std.array_list.Managed([3]u16)),
+    colors: std.array_list.Managed(rl.Color),
+
+    fn init(gpa: std.mem.Allocator) Primitives {
+        return .{
+            .indices = .init(gpa),
+            .colors = .init(gpa),
+        };
+    }
+
+    fn deinit(self: @This()) void {
+        for (self.indices.items) |v| {
+            v.deinit();
+        }
+        self.indices.deinit();
+        self.colors.deinit();
+    }
+
+    fn add(self: @This(), indice: [3]u16, color: rl.Color) !void {
+        for (self.colors.items, 0..) |v, i| {
+            if (rl.ColorIsEqual(v, color)) {
+                try self.indices.items[i].append(indice);
+                return;
+            }
+        }
+        try self.indices.append(.init(self.indices.allocator));
+        try self.indices[self.indices.items.len - 1].append(indice);
+        try self.colors.append(color);
+    }
+};
+
 voxels: std.array_list.Managed(Voxel),
 colors: std.array_list.Managed(rl.Color),
 gpa: std.mem.Allocator,
@@ -61,11 +93,13 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
         min: []const f32,
     };
 
-    const indices, const vertices = try self.buildIndicesAndVertices();
-    defer indices.deinit();
+    const primitives, const vertices = try self.buildPrimitivesMock();
+    defer primitives.deinit();
     defer vertices.deinit();
-    std.debug.print("indices: {any}\n", .{indices.items});
-    std.debug.print("vertices: {any}\n", .{vertices.items});
+
+    for( primitives.indices.items )  |indices| {
+
+    }
 
     var indices_max: u32 = 0;
     var indices_min: u32 = std.math.maxInt(u32);
@@ -160,7 +194,7 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
     try file.writeAll(json);
 }
 
-fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u16), std.array_list.Managed([3]f32) } {
+fn buildPrimitives(self: Self) !struct { std.array_list.Managed([3]u16), std.array_list.Managed([3]f32) } {
     const box = voxBoundingBox(self.voxels.items);
     const size = [3]usize{
         @intFromFloat(@abs(box[1].x - box[0].x)),
@@ -240,16 +274,16 @@ fn buildIndicesAndVertices(self: Self) !struct { std.array_list.Managed([3]u16),
     return .{ indices, vertices_flat };
 }
 
-fn buildIndicesAndVerticesMock(self: Self) !struct { std.array_list.Managed([3]u16), std.array_list.Managed([3]f32) } {
-    var indices = std.array_list.Managed([3]u16).init(self.gpa); //triangle indices
-    var vertices = std.array_list.Managed([3]f32).init(self.gpa); //vertex xyz
-    try indices.append(.{ 0, 1, 2 });
-    try indices.append(.{ 3, 2, 1 });
+fn buildPrimitivesMock(self: Self) !struct { Primitives, std.array_list.Managed([3]f32) } {
+    const primitives = Primitives.init(self.gpa);
+    try primitives.add(.{ 0, 1, 2 }, rl.WHITE);
+    try primitives.add(.{ 3, 2, 1 }, rl.WHITE);
+    var vertices = std.array_list.Managed([3]f32).init(self.gpa);
     try vertices.append(.{ 0.0, 0.0, 0.0 });
     try vertices.append(.{ 1.0, 0.0, 0.0 });
     try vertices.append(.{ 0.0, 1.0, 0.0 });
     try vertices.append(.{ 1.0, 1.0, 0.0 });
-    return .{ indices, vertices };
+    return .{ primitives, vertices };
 }
 
 fn voxBoundingBox(haystack: []const Voxel) [2]rl.Vector3 {
