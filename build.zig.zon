@@ -5,12 +5,12 @@
 
     .fingerprint = 0x1069635f6f020378,
 
-    .minimum_zig_version = "0.14.1",
+    .minimum_zig_version = "0.15.1",
 
     .dependencies = .{
         .raylib = .{
-            .url = "git+https://github.com/raysan5/raylib.git#beabb1300d859b8503bdbec098956df3e3843b48",
-            .hash = "raylib-5.6.0-dev-whq8uGBk1QRFut3l5D_8MM05ygLUspH0OuXgGvfoQm_p",
+            .url = "git+https://github.com/raysan5/raylib.git#25a54d87e6ebeb70ef20443fb4e010195b958ead",
+            .hash = "raylib-5.6.0-dev-whq8uMd3CwVaMFm1ee-Q3MuwwxUnMnWo05bPv15ygeUq",
         },
     },
 

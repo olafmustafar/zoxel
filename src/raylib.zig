@@ -1,11 +1,5 @@
-pub const rl = @cImport({
-    @cInclude("raylib.h");
-    @cInclude("raymath.h");
-    @cInclude("rcamera.h");
-    @cInclude("rlgl.h");
-});
-
 const std = @import("std");
+pub const rl = @import("raylib");
 
 pub fn vec2(x: f32, y: f32) rl.Vector2 {
     return rl.Vector2{ .x = x, .y = y };
