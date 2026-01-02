@@ -30,7 +30,7 @@ const Primitives = struct {
         self.colors.deinit();
     }
 
-    fn add(self: @This(), indice: [3]u16, color: rl.Color) !void {
+    fn add(self: *@This(), indice: [3]u16, color: rl.Color) !void {
         for (self.colors.items, 0..) |v, i| {
             if (rl.ColorIsEqual(v, color)) {
                 try self.indices.items[i].append(indice);
@@ -38,7 +38,7 @@ const Primitives = struct {
             }
         }
         try self.indices.append(.init(self.indices.allocator));
-        try self.indices[self.indices.items.len - 1].append(indice);
+        try self.indices.items[self.indices.items.len - 1].append(indice);
         try self.colors.append(color);
     }
 };
@@ -97,15 +97,16 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
     defer primitives.deinit();
     defer vertices.deinit();
 
-    for( primitives.indices.items )  |indices| {
-
-    }
+    // for( primitives.indices.items )  |indices| {
+    // }
 
     var indices_max: u32 = 0;
     var indices_min: u32 = std.math.maxInt(u32);
-    for (indices.items) |i| {
+    for (primitives.indices.items) |indices| {
+        for(indices.items)|i|{
         indices_max = @max(indices_max, i[0], i[1], i[2]);
         indices_min = @min(indices_min, i[0], i[1], i[2]);
+        }
     }
     var vertices_max = [3]f32{ 0, 0, 0 };
     for (vertices.items) |i| {
@@ -114,7 +115,7 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
         vertices_max[2] = @max(vertices_max[2], i[2]);
     }
 
-    const indices_u8 = @as([]u8, @ptrCast(indices.items));
+    const indices_u8 = @as([]u8, @ptrCast(primitives.indices.items));
     const vertices_u8 = @as([]u8, @ptrCast(vertices.items));
     const vertices_extra_offset = @mod(indices_u8.len, @sizeOf(f32));
     const buffer = try self.gpa.alloc(u8, indices_u8.len + vertices_extra_offset + vertices_u8.len);
@@ -172,7 +173,7 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
                 .bufferView = 0,
                 .byteOffset = 0,
                 .componentType = 5123, //unsigned short 16
-                .count = @intCast(indices.items.len * 3),
+                .count = @intCast(primitives.indices.items.len * 3),
                 .type = "SCALAR",
                 .max = &[_]f32{@floatFromInt(indices_max)},
                 .min = &[_]f32{@floatFromInt(indices_min)},
@@ -275,7 +276,7 @@ fn buildPrimitives(self: Self) !struct { std.array_list.Managed([3]u16), std.arr
 }
 
 fn buildPrimitivesMock(self: Self) !struct { Primitives, std.array_list.Managed([3]f32) } {
-    const primitives = Primitives.init(self.gpa);
+    var primitives = Primitives.init(self.gpa);
     try primitives.add(.{ 0, 1, 2 }, rl.WHITE);
     try primitives.add(.{ 3, 2, 1 }, rl.WHITE);
     var vertices = std.array_list.Managed([3]f32).init(self.gpa);

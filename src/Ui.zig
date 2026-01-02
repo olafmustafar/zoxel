@@ -7,7 +7,6 @@ const vec2 = raylib.vec2;
 const rec = raylib.rec;
 const cast = raylib.cast;
 const s2color = raylib.str2ColorComptime;
-const message_time  = 3.0;
 
 const Self = @This();
 camera: rl.Camera3D = .{
@@ -20,26 +19,13 @@ camera: rl.Camera3D = .{
 gui: rl.RenderTexture2D,
 selector_pos: f32 = 0,
 
-message: [:0]const u8,
-message_timer: f32 = 0,
 
 pub fn init() Self {
-    return .{ .gui = rl.LoadRenderTexture(90, 90), .message = "" };
+    return .{ .gui = rl.LoadRenderTexture(90, 90)};
 }
 
 pub fn deinit(self: *Self) void {
     rl.UnloadRenderTexture(self.gui);
-}
-
-pub fn displayError(self: *Self, err: anyerror) void {
-    self.message_timer = message_time;
-    self.message = switch (err) {
-        error.MissingArgument => "Missing argument!",
-        error.NotACommand => "Not a command!",
-        error.NotImplemented => "Not implemented!",
-        error.WrongFormat => "Wrong argument format!",
-        else => @errorName(err),
-    };
 }
 
 pub fn render(self: *Self, editor: Editor, rotation: struct { ve: f32, ho: f32 }) void {
@@ -87,16 +73,6 @@ pub fn render(self: *Self, editor: Editor, rotation: struct { ve: f32, ho: f32 }
         const fw: f32 = @floatFromInt(w);
         const fh: f32 = @floatFromInt(h);
         rl.DrawTextureRec(self.gui.texture, rec(0, 0, fw, -fh), vec2(@as(f32, @floatFromInt(i)) * fw, 0), rl.RAYWHITE);
-    }
-
-    if (self.message_timer > 0) {
-        self.message_timer = @max(self.message_timer - rl.GetFrameTime(), 0);
-        const point_size = 20;
-        const x = @divFloor(rl.GetScreenWidth() - rl.MeasureText(self.message, point_size), 2);
-        const y = @divFloor(rl.GetScreenHeight() - point_size, 2);
-        const alpha = self.message_timer / message_time;
-        rl.DrawRectangle(x - 5, y - 5, rl.MeasureText(self.message, point_size) + 10, point_size + 10, rl.ColorAlpha(rl.BLACK, alpha));
-        rl.DrawText(self.message, x, y, point_size, rl.ColorAlpha(s2color("#ff6e6e"), alpha));
     }
 
     const blocks_txt = rl.TextFormat("blocks: %i ", editor.blocks.items.len);

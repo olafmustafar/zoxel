@@ -3,6 +3,7 @@ const lib = @import("zig_shipdesigner_lib");
 const raylib = @import("raylib.zig");
 const Dialog = @import("Dialog.zig");
 const Editor = @import("Editor.zig");
+const MessageDisplay = @import("MessageDisplay.zig");
 const Ui = @import("Ui.zig");
 const rl = raylib.rl;
 const rec = raylib.rec;
@@ -46,6 +47,7 @@ pub fn main() !void {
     var mode: enum { normal, dialog, extra } = .normal;
 
     var ui = Ui.init();
+    var display = MessageDisplay{};
     var dialog = Dialog.init();
     defer dialog.deinit();
 
@@ -99,7 +101,7 @@ pub fn main() !void {
                     .cancelled => mode = .normal,
                     .finished => |command| {
                         mode = .normal;
-                        editor.command(@ptrCast(command)) catch |e| ui.displayError(e);
+                        editor.command(@ptrCast(command)) catch |e| display.displayError(e);
                     },
                 }
             },
@@ -152,6 +154,7 @@ pub fn main() !void {
             if (mode == .dialog) {
                 dialog.render(window_w, window_h);
             }
+            display.updateAndRender();
 
             ui.render(editor, .{ .ve = ve_rotation, .ho = ho_rotation });
             rl.DrawFPS(0, 0);
