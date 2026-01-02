@@ -1,15 +1,18 @@
 const std = @import("std");
 const lib = @import("zig_shipdesigner_lib");
-const raylib = @import("raylib.zig");
-const Dialog = @import("Dialog.zig");
+const rl = @import("raylib");
 const Editor = @import("Editor.zig");
-const MessageDisplay = @import("MessageDisplay.zig");
 const Ui = @import("Ui.zig");
-const rl = raylib.rl;
-const rec = raylib.rec;
-const vec3 = raylib.vec3;
-const vec3val = raylib.vec3val;
-const vec2 = raylib.vec2;
+
+const components = @import("raylib_components");
+const Dialog = components.Dialog;
+const MessageDisplay = components.MessageDisplay;
+
+const utils = components.utils;
+const rec = utils.rec;
+const vec3 = utils.vec3;
+const vec3val = utils.vec3val;
+const vec2 = utils.vec2;
 
 const window_w = 720;
 const window_h = 720;

@@ -1,8 +1,8 @@
 const std = @import("std");
-
-const Array3d = @import("raylib.zig").Array3d;
-const cast = @import("raylib.zig").cast;
-const rl = @import("raylib.zig").rl;
+const rl = @import("raylib");
+const utils = @import("raylib_components").utils;
+const Array3d = utils.Array3d;
+const cast = utils.cast;
 
 const Self = @This();
 

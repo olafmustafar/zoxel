@@ -8,8 +8,9 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{ .name = "zoxel", .root_module = mod });
     b.installArtifact(exe);
 
-    const raylib = b.dependency("raylib", .{ .target = target, .optimize = optimize }).artifact("raylib");
+    const opts = .{ .target = target, .optimize = optimize };
 
+    const raylib = b.dependency("raylib", opts).artifact("raylib");
     const translate_raylib = b.addTranslateC(.{
         .target = target,
         .optimize = optimize,
@@ -25,6 +26,11 @@ pub fn build(b: *std.Build) void {
     const raylib_mod = translate_raylib.createModule();
     raylib_mod.linkLibrary(raylib);
     mod.addImport("raylib", raylib_mod);
+
+    const raylib_components = b.dependency("raylib_components", opts).module("raylib_components");
+    mod.addImport("raylib_components", raylib_components);
+    raylib_components.addImport("raylib", raylib_mod);
+    raylib_components.linkLibrary(raylib);
 
     const exe_check = b.addExecutable(.{ .name = "zoxel", .root_module = mod });
     const check = b.step("check", "Check if compiles");

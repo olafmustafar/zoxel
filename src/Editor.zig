@@ -1,9 +1,10 @@
 const std = @import("std");
-const rl = @import("raylib.zig").rl;
-const vec3 = @import("raylib.zig").vec3;
-const str2Color = @import("raylib.zig").str2Color;
 const VoxWriter = @import("VoxWriter.zig");
 const GltfWriter = @import("GltfWriter.zig");
+const rl = @import("raylib");
+const utils = @import("raylib_components").utils;
+const vec3 = utils.vec3;
+const str2Color = utils.str2Color;
 
 const Voxel = struct {
     pos: rl.Vector3,
