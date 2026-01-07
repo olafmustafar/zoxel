@@ -12,33 +12,33 @@ const Voxel = struct {
 };
 
 const Primitives = struct {
-    indices: std.array_list.Managed(std.array_list.Managed([3]u16)),
+    indices_arrays: std.array_list.Managed(std.array_list.Managed([3]u16)),
     colors: std.array_list.Managed(rl.Color),
 
     fn init(gpa: std.mem.Allocator) Primitives {
         return .{
-            .indices = .init(gpa),
+            .indices_arrays = .init(gpa),
             .colors = .init(gpa),
         };
     }
 
     fn deinit(self: @This()) void {
-        for (self.indices.items) |v| {
+        for (self.indices_arrays.items) |v| {
             v.deinit();
         }
-        self.indices.deinit();
+        self.indices_arrays.deinit();
         self.colors.deinit();
     }
 
     fn add(self: *@This(), indice: [3]u16, color: rl.Color) !void {
         for (self.colors.items, 0..) |v, i| {
             if (rl.ColorIsEqual(v, color)) {
-                try self.indices.items[i].append(indice);
+                try self.indices_arrays.items[i].append(indice);
                 return;
             }
         }
-        try self.indices.append(.init(self.indices.allocator));
-        try self.indices.items[self.indices.items.len - 1].append(indice);
+        try self.indices_arrays.append(.init(self.indices_arrays.allocator));
+        try self.indices_arrays.items[self.indices_arrays.items.len - 1].append(indice);
         try self.colors.append(color);
     }
 };
@@ -79,7 +79,7 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
 
     const Scene = struct { nodes: []const i32 };
     const Node = struct { mesh: i32 };
-    const Primitive = struct { attributes: struct { POSITION: i32 }, indices: i32 };
+    const Primitive = struct { attributes: struct { POSITION: i32 }, indices: i32, material: i32 };
     const Mesh = struct { primitives: []const Primitive };
     const Buffer = struct { uri: []const u8, byteLength: usize };
     const BufferView = struct { buffer: i32, byteOffset: usize, byteLength: usize, target: i32 };
@@ -92,22 +92,73 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
         max: []const f32,
         min: []const f32,
     };
+    const PbrMetallicRoughness = struct { baseColorFactor: [4]f32, metallicFactor: f32, roughnessFactor: f32 };
+    const Material = struct { pbrMetallicRoughness: PbrMetallicRoughness };
 
     const primitives, const vertices = try self.buildPrimitivesMock();
     defer primitives.deinit();
     defer vertices.deinit();
 
-    // for( primitives.indices.items )  |indices| {
-    // }
+    var meshes = std.array_list.Managed(Mesh).init(self.gpa);
+    defer meshes.deinit();
+    var materials = std.array_list.Managed(Material).init(self.gpa);
+    defer materials.deinit();
+    var buffer = std.array_list.Managed(u8).init(self.gpa);
+    defer buffer.deinit();
+    var buffer_views = std.array_list.Managed(BufferView).init(self.gpa);
+    defer buffer_views.deinit();
+    var acessors = std.array_list.Managed(Accessor).init(self.gpa);
+    defer acessors.deinit();
 
-    var indices_max: u32 = 0;
-    var indices_min: u32 = std.math.maxInt(u32);
-    for (primitives.indices.items) |indices| {
-        for(indices.items)|i|{
-        indices_max = @max(indices_max, i[0], i[1], i[2]);
-        indices_min = @min(indices_min, i[0], i[1], i[2]);
+    var byte_offset: usize = 0;
+    for (primitives.indices_arrays.items, primitives.colors.items, 0..) |_indices, color, i| {
+        //todo
+        try meshes.append(.{
+            .primitives = &[_]Primitive{
+                .{
+                    .attributes = .{ .POSITION = 1 },
+                    .indices = @intCast(i),
+                    .material = @intCast(i),
+                },
+            },
+        });
+
+        var indices_max: u32 = 0;
+        var indices_min: u32 = std.math.maxInt(u32);
+        for (_indices.items) |ind| {
+            indices_max = @max(indices_max, ind[0], ind[1], ind[2]);
+            indices_min = @min(indices_min, ind[0], ind[1], ind[2]);
         }
+
+        const indices_u8 = @as([]u8, @ptrCast(_indices.items));
+        const bufslice = buffer.addManyAsSlice(indices_u8);
+        @memcpy(bufslice, indices_u8);
+
+        try acessors.append(.{
+            .bufferView = 0,
+            .byteOffset = byte_offset,
+            .componentType = 5123, //unsigned short 16
+            .count = @intCast(_indices.items.len * 3),
+            .type = "SCALAR",
+            .max = &[_]f32{@floatFromInt(indices_max)},
+            .min = &[_]f32{@floatFromInt(indices_min)},
+        });
+        byte_offset += indices_u8.len;
+
+        try materials.append(.{
+            .pbrMetallicRoughness = .{
+                .baseColorFactor = .{
+                    cast(f32, color.r) / 255,
+                    cast(f32, color.g) / 255,
+                    cast(f32, color.b) / 255,
+                    cast(f32, color.a) / 255,
+                },
+                .metallicFactor = 0,
+                .roughnessFactor = 0,
+            },
+        });
     }
+
     var vertices_max = [3]f32{ 0, 0, 0 };
     for (vertices.items) |i| {
         vertices_max[0] = @max(vertices_max[0], i[0]);
@@ -115,15 +166,9 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
         vertices_max[2] = @max(vertices_max[2], i[2]);
     }
 
-    const indices_u8 = @as([]u8, @ptrCast(primitives.indices.items));
     const vertices_u8 = @as([]u8, @ptrCast(vertices.items));
-    const vertices_extra_offset = @mod(indices_u8.len, @sizeOf(f32));
-    const buffer = try self.gpa.alloc(u8, indices_u8.len + vertices_extra_offset + vertices_u8.len);
-    defer self.gpa.free(buffer);
-
-    for (buffer) |*v| v.* = 0;
-    @memcpy(buffer[0..indices_u8.len], indices_u8);
-    @memcpy(buffer[indices_u8.len + vertices_extra_offset .. indices_u8.len + vertices_extra_offset + vertices_u8.len], vertices_u8);
+    @memset(buffer.addManyAsSlice(@mod(buffer.items.len, @sizeOf(f32))), 0); //add pad elements
+    @memset(buffer.addManyAsSlice(vertices_u8.len), vertices_u8);
 
     var buffer_b64_writer = std.Io.Writer.Allocating.init(self.gpa);
     defer buffer_b64_writer.deinit();
@@ -158,7 +203,7 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
             .{
                 .buffer = 0,
                 .byteOffset = 0,
-                .byteLength = indices_u8.len,
+                .byteLength = indices_u8.len, //todo
                 .target = 34963,
             },
             .{
@@ -173,7 +218,7 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
                 .bufferView = 0,
                 .byteOffset = 0,
                 .componentType = 5123, //unsigned short 16
-                .count = @intCast(primitives.indices.items.len * 3),
+                .count = @intCast(primitives.indices_arrays.items.len * 3),
                 .type = "SCALAR",
                 .max = &[_]f32{@floatFromInt(indices_max)},
                 .min = &[_]f32{@floatFromInt(indices_min)},
