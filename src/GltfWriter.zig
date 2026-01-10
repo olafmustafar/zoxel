@@ -11,34 +11,34 @@ const Voxel = struct {
     color_idx: usize,
 };
 
-const Primitives = struct {
-    indices_arrays: std.array_list.Managed(std.array_list.Managed([3]u16)),
+const IndicesColors = struct {
+    indices: std.array_list.Managed(std.array_list.Managed([3]u16)),
     colors: std.array_list.Managed(rl.Color),
 
-    fn init(gpa: std.mem.Allocator) Primitives {
+    fn init(gpa: std.mem.Allocator) IndicesColors {
         return .{
-            .indices_arrays = .init(gpa),
+            .indices = .init(gpa),
             .colors = .init(gpa),
         };
     }
 
     fn deinit(self: @This()) void {
-        for (self.indices_arrays.items) |v| {
+        for (self.indices.items) |v| {
             v.deinit();
         }
-        self.indices_arrays.deinit();
+        self.indices.deinit();
         self.colors.deinit();
     }
 
     fn add(self: *@This(), indice: [3]u16, color: rl.Color) !void {
         for (self.colors.items, 0..) |v, i| {
             if (rl.ColorIsEqual(v, color)) {
-                try self.indices_arrays.items[i].append(indice);
+                try self.indices.items[i].append(indice);
                 return;
             }
         }
-        try self.indices_arrays.append(.init(self.indices_arrays.allocator));
-        try self.indices_arrays.items[self.indices_arrays.items.len - 1].append(indice);
+        try self.indices.append(.init(self.indices.allocator));
+        try self.indices.items[self.indices.items.len - 1].append(indice);
         try self.colors.append(color);
     }
 };
@@ -66,10 +66,10 @@ pub fn addVox(self: *Self, position: rl.Vector3, color: rl.Color) !void {
     }
 
     if (colorfound) |color_idx| {
-        try self.voxels.append(.{ .position = position, .color_idx = color_idx + 1 });
+        try self.voxels.append(.{ .position = position, .color_idx = color_idx });
     } else {
         try self.colors.append(color);
-        try self.voxels.append(.{ .position = position, .color_idx = self.colors.items.len });
+        try self.voxels.append(.{ .position = position, .color_idx = self.colors.items.len - 1 });
     }
 }
 
@@ -95,55 +95,50 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
     const PbrMetallicRoughness = struct { baseColorFactor: [4]f32, metallicFactor: f32, roughnessFactor: f32 };
     const Material = struct { pbrMetallicRoughness: PbrMetallicRoughness };
 
-    const primitives, const vertices = try self.buildPrimitivesMock();
-    defer primitives.deinit();
+    const indices_colors, const vertices = try self.buildPrimitives();
+    defer indices_colors.deinit();
     defer vertices.deinit();
-
-    var meshes = std.array_list.Managed(Mesh).init(self.gpa);
-    defer meshes.deinit();
+    var primitives = std.array_list.Managed(Primitive).init(self.gpa);
+    defer primitives.deinit();
     var materials = std.array_list.Managed(Material).init(self.gpa);
     defer materials.deinit();
     var buffer = std.array_list.Managed(u8).init(self.gpa);
     defer buffer.deinit();
-    var buffer_views = std.array_list.Managed(BufferView).init(self.gpa);
-    defer buffer_views.deinit();
     var acessors = std.array_list.Managed(Accessor).init(self.gpa);
     defer acessors.deinit();
+    var minmax_buffer = std.array_list.Managed(f32).init(self.gpa);
+    defer minmax_buffer.deinit();
 
-    var byte_offset: usize = 0;
-    for (primitives.indices_arrays.items, primitives.colors.items, 0..) |_indices, color, i| {
-        //todo
-        try meshes.append(.{
-            .primitives = &[_]Primitive{
-                .{
-                    .attributes = .{ .POSITION = 1 },
-                    .indices = @intCast(i),
-                    .material = @intCast(i),
-                },
-            },
+    var byte_offset: i32 = 0;
+    for (indices_colors.indices.items, indices_colors.colors.items, 0..) |indices, color, i| {
+        try primitives.append(.{
+            .attributes = .{ .POSITION = @intCast(indices_colors.indices.items.len) },
+            .indices = @intCast(i),
+            .material = @intCast(i),
         });
 
-        var indices_max: u32 = 0;
-        var indices_min: u32 = std.math.maxInt(u32);
-        for (_indices.items) |ind| {
-            indices_max = @max(indices_max, ind[0], ind[1], ind[2]);
-            indices_min = @min(indices_min, ind[0], ind[1], ind[2]);
+        const max = try minmax_buffer.addOne();
+        const min = try minmax_buffer.addOne();
+        max.* = 0;
+        min.* = std.math.floatMax(f16);
+        for (indices.items) |ind| {
+            max.* = @as(f32, @floatFromInt(@max(ind[0], ind[1], ind[2], @as(u16, @intFromFloat(max.*)))));
+            min.* = @as(f32, @floatFromInt(@min(ind[0], ind[1], ind[2], @as(u16, @intFromFloat(min.*)))));
         }
 
-        const indices_u8 = @as([]u8, @ptrCast(_indices.items));
-        const bufslice = buffer.addManyAsSlice(indices_u8);
-        @memcpy(bufslice, indices_u8);
+        const indices_u8 = @as([]u8, @ptrCast(indices.items));
+        @memcpy(try buffer.addManyAsSlice(indices_u8.len), indices_u8);
 
         try acessors.append(.{
             .bufferView = 0,
             .byteOffset = byte_offset,
             .componentType = 5123, //unsigned short 16
-            .count = @intCast(_indices.items.len * 3),
+            .count = @intCast(indices.items.len * 3),
             .type = "SCALAR",
-            .max = &[_]f32{@floatFromInt(indices_max)},
-            .min = &[_]f32{@floatFromInt(indices_min)},
+            .max = @as([]const f32, @ptrCast(max)),
+            .min = @as([]const f32, @ptrCast(min)),
         });
-        byte_offset += indices_u8.len;
+        byte_offset += @intCast(indices_u8.len);
 
         try materials.append(.{
             .pbrMetallicRoughness = .{
@@ -159,6 +154,25 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
         });
     }
 
+    var buffer_views = std.array_list.Managed(BufferView).init(self.gpa);
+    defer buffer_views.deinit();
+    try buffer_views.append(.{
+        .buffer = 0,
+        .byteLength = buffer.items.len,
+        .byteOffset = 0,
+        .target = 34963,
+    });
+    @memset(try buffer.addManyAsSlice(@mod(buffer.items.len, @sizeOf(f32))), 0); //add pad elements
+
+    const vertices_u8 = @as([]u8, @ptrCast(vertices.items));
+    try buffer_views.append(.{
+        .buffer = 0,
+        .byteLength = vertices_u8.len,
+        .byteOffset = buffer.items.len,
+        .target = 34962,
+    });
+    @memcpy(try buffer.addManyAsSlice(vertices_u8.len), vertices_u8);
+
     var vertices_max = [3]f32{ 0, 0, 0 };
     for (vertices.items) |i| {
         vertices_max[0] = @max(vertices_max[0], i[0]);
@@ -166,16 +180,20 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
         vertices_max[2] = @max(vertices_max[2], i[2]);
     }
 
-    const vertices_u8 = @as([]u8, @ptrCast(vertices.items));
-    @memset(buffer.addManyAsSlice(@mod(buffer.items.len, @sizeOf(f32))), 0); //add pad elements
-    @memset(buffer.addManyAsSlice(vertices_u8.len), vertices_u8);
+    try acessors.append(.{
+        .bufferView = 1,
+        .byteOffset = 0,
+        .componentType = 5126, //signed float 32
+        .count = @intCast(vertices.items.len),
+        .type = "VEC3",
+        .max = &vertices_max,
+        .min = &[_]f32{ 0.0, 0.0, 0.0 },
+    });
 
     var buffer_b64_writer = std.Io.Writer.Allocating.init(self.gpa);
     defer buffer_b64_writer.deinit();
-
     try buffer_b64_writer.writer.print("data:application/octet-stream;base64,", .{});
-    try std.base64.standard.Encoder.encodeWriter(&buffer_b64_writer.writer, buffer);
-
+    try std.base64.standard.Encoder.encodeWriter(&buffer_b64_writer.writer, buffer.items);
     var buffer_b64 = buffer_b64_writer.toArrayList();
     defer buffer_b64.deinit(self.gpa);
     std.debug.print("{s}\n", .{buffer_b64.items});
@@ -185,54 +203,14 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
         .scene = 0,
         .scenes = [_]Scene{.{ .nodes = &[_]i32{0} }},
         .nodes = [_]Node{.{ .mesh = 0 }},
-        .meshes = [_]Mesh{
-            .{
-                .primitives = &[_]Primitive{
-                    .{
-                        .attributes = .{ .POSITION = 1 },
-                        .indices = 0,
-                    },
-                },
-            },
-        },
+        .meshes = [_]Mesh{.{ .primitives = primitives.items }},
         .buffers = [_]Buffer{.{
             .uri = buffer_b64.items,
-            .byteLength = buffer.len,
+            .byteLength = buffer.items.len,
         }},
-        .bufferViews = [_]BufferView{
-            .{
-                .buffer = 0,
-                .byteOffset = 0,
-                .byteLength = indices_u8.len, //todo
-                .target = 34963,
-            },
-            .{
-                .buffer = 0,
-                .byteOffset = indices_u8.len + vertices_extra_offset,
-                .byteLength = vertices_u8.len,
-                .target = 34962,
-            },
-        },
-        .accessors = [_]Accessor{
-            .{
-                .bufferView = 0,
-                .byteOffset = 0,
-                .componentType = 5123, //unsigned short 16
-                .count = @intCast(primitives.indices_arrays.items.len * 3),
-                .type = "SCALAR",
-                .max = &[_]f32{@floatFromInt(indices_max)},
-                .min = &[_]f32{@floatFromInt(indices_min)},
-            },
-            .{
-                .bufferView = 1,
-                .byteOffset = 0,
-                .componentType = 5126, //signed float 32
-                .count = @intCast(vertices.items.len),
-                .type = "VEC3",
-                .max = &vertices_max,
-                .min = &[_]f32{ 0.0, 0.0, 0.0 },
-            },
-        },
+        .bufferViews = &buffer_views.items,
+        .accessors = &acessors.items,
+        .materials = &materials.items,
     };
 
     var buffer2: [0x1000]u8 = undefined;
@@ -240,7 +218,7 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
     try file.writeAll(json);
 }
 
-fn buildPrimitives(self: Self) !struct { std.array_list.Managed([3]u16), std.array_list.Managed([3]f32) } {
+fn buildPrimitives(self: Self) !struct { IndicesColors, std.array_list.Managed([3]f32) } {
     const box = voxBoundingBox(self.voxels.items);
     const size = [3]usize{
         @intFromFloat(@abs(box[1].x - box[0].x)),
@@ -250,20 +228,23 @@ fn buildPrimitives(self: Self) !struct { std.array_list.Managed([3]u16), std.arr
 
     const voxels = try Array3d(bool).init(self.gpa, size);
     defer voxels.deinit();
+    const colors = try Array3d(rl.Color).init(self.gpa, size);
+    defer colors.deinit();
     for (self.voxels.items) |vox| {
-        voxels.set(
+        const xyz: [3]usize = .{
             @intFromFloat(vox.position.x - box[0].x),
             @intFromFloat(vox.position.y - box[0].y),
             @intFromFloat(vox.position.z - box[0].z),
-            true,
-        );
+        };
+        voxels.set(xyz[0], xyz[1], xyz[2], true);
+        colors.set(xyz[0], xyz[1], xyz[2], self.colors.items[vox.color_idx]);
     }
 
     const vertices = try Array3d(u16).init(self.gpa, .{ size[0] + 1, size[1] + 1, size[2] + 1 });
     defer vertices.deinit();
     var vertices_flat = std.array_list.Managed([3]f32).init(self.gpa); //vertex xyz
     var vert_idx: u16 = 0;
-    var indices = std.array_list.Managed([3]u16).init(self.gpa); //triangle indices
+    var indices = IndicesColors.init(self.gpa);
     for (0..voxels.size[2]) |z| {
         for (0..voxels.size[1]) |y| {
             for (0..voxels.size[0]) |x| {
@@ -284,6 +265,7 @@ fn buildPrimitives(self: Self) !struct { std.array_list.Managed([3]u16), std.arr
                     const cond = face_condition.cond;
                     const face = face_condition.face;
                     if (voxels.get(xi + cond[0], yi + cond[1], zi + cond[2]) == null and voxels.get(xi, yi, zi) != null) {
+                        const color = colors.get(xi, yi, zi).?;
                         const ind = [_][3][3]i32{
                             .{ //face 1 |/
                                 .{ xi + face[0][0], yi + face[0][1], zi + face[0][2] },
@@ -305,11 +287,11 @@ fn buildPrimitives(self: Self) !struct { std.array_list.Managed([3]u16), std.arr
                                     vert_idx += 1;
                                 }
                             }
-                            try indices.append(.{
+                            try indices.add(.{
                                 vertices.get(ind2[0][0], ind2[0][1], ind2[0][2]).?,
                                 vertices.get(ind2[1][0], ind2[1][1], ind2[1][2]).?,
                                 vertices.get(ind2[2][0], ind2[2][1], ind2[2][2]).?,
-                            });
+                            }, color);
                         }
                     }
                 }
@@ -320,9 +302,9 @@ fn buildPrimitives(self: Self) !struct { std.array_list.Managed([3]u16), std.arr
     return .{ indices, vertices_flat };
 }
 
-fn buildPrimitivesMock(self: Self) !struct { Primitives, std.array_list.Managed([3]f32) } {
-    var primitives = Primitives.init(self.gpa);
-    try primitives.add(.{ 0, 1, 2 }, rl.WHITE);
+fn buildPrimitivesMock(self: Self) !struct { IndicesColors, std.array_list.Managed([3]f32) } {
+    var primitives = IndicesColors.init(self.gpa);
+    try primitives.add(.{ 0, 1, 2 }, rl.BLACK);
     try primitives.add(.{ 3, 2, 1 }, rl.WHITE);
     var vertices = std.array_list.Managed([3]f32).init(self.gpa);
     try vertices.append(.{ 0.0, 0.0, 0.0 });
