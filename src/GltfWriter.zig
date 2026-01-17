@@ -213,7 +213,7 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
         .materials = &materials.items,
     };
 
-    var buffer2: [0x1000]u8 = undefined;
+    var buffer2: [0x100000]u8 = undefined;
     const json = try std.fmt.bufPrint(&buffer2, "{f}", .{std.json.fmt(gltf, .{ .whitespace = .indent_2 })});
     try file.writeAll(json);
 }
