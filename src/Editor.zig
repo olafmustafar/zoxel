@@ -1,15 +1,12 @@
 const std = @import("std");
 const VoxWriter = @import("VoxWriter.zig");
 const GltfWriter = @import("GltfWriter.zig");
+const VoxLoader = @import("VoxLoader.zig");
 const rl = @import("raylib");
 const utils = @import("raylib_components").utils;
 const vec3 = utils.vec3;
 const str2Color = utils.str2Color;
-
-const Voxel = struct {
-    pos: rl.Vector3,
-    color: rl.Color,
-};
+const Voxel = @import("Voxel.zig");
 
 const CommandError = error{
     NotACommand,
@@ -190,6 +187,21 @@ pub fn command(self: *Self, line: []const u8) !void {
             }
             try writer.writeFile(filename);
         } else return CommandError.NotImplemented;
+    } else if (std.mem.eql(u8, cmd, "load")) {
+        const filename = it.next() orelse return CommandError.MissingArgument;
+        const dot = std.mem.find(u8, filename, ".") orelse return CommandError.WrongFormat;
+
+        if (!std.mem.eql(u8, filename[dot..], ".vox")) {
+            return CommandError.NotImplemented;
+        }
+
+        var threaded = std.Io.Threaded.init_single_threaded;
+        const voxels = try VoxLoader.load(self.gpa, threaded.io(), filename);
+        defer voxels.deinit();
+
+        for (voxels.items) |vox| {
+            try self.placeVoxel(vox);
+        }
     } else {
         return CommandError.NotACommand;
     }

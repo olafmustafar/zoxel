@@ -1,7 +1,8 @@
 const std = @import("std");
 const rl = @import("raylib");
-const utils = @import("raylib_components").utils;
+// const Voxel = @import("Voxel.zig");
 const Array3d = utils.Array3d;
+const utils = @import("raylib_components").utils;
 const cast = utils.cast;
 
 const Self = @This();
@@ -149,7 +150,7 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
                     cast(f32, color.a) / 255,
                 },
                 .metallicFactor = 0,
-                .roughnessFactor = 0,
+                .roughnessFactor = 1,
             },
         });
     }

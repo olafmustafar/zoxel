@@ -72,10 +72,10 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
     var rgba = std.mem.zeroes([256]u32);
     for (self.colors.items, 0..) |color, i| {
         rgba[i] = @bitCast([4]u8{
-            @intCast(color.r),
-            @intCast(color.g),
-            @intCast(color.b),
-            @intCast(color.a),
+            color.r,
+            color.g,
+            color.b,
+            color.a,
         });
     }
 
@@ -83,10 +83,6 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
         .tag = "MAIN",
         .data = "",
         .children = &[_]Chunk{
-            // Chunk{
-            //     .tag = "PACK",
-            //     .data = toCharArray(&[_]i32{1}),
-            // },
             Chunk{
                 .tag = "SIZE",
                 .data = toCharArray(&size),
