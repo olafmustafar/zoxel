@@ -1,6 +1,8 @@
 const std = @import("std");
 const lib = @import("zig_shipdesigner_lib");
 const rl = @import("raylib");
+const keydown = rl.IsKeyDown;
+const keypress = rl.IsKeyPressed;
 const Editor = @import("Editor.zig");
 const Ui = @import("Ui.zig");
 
@@ -57,45 +59,46 @@ pub fn main() !void {
     while (!rl.WindowShouldClose()) {
         switch (mode) {
             .normal => {
-                const isShiftDown = rl.IsKeyDown(rl.KEY_LEFT_SHIFT) or rl.IsKeyDown(rl.KEY_RIGHT_SHIFT);
+                const isShiftDown = keydown(rl.KEY_LEFT_SHIFT) or keydown(rl.KEY_RIGHT_SHIFT);
 
-                if (rl.IsKeyDown(rl.KEY_SPACE)) try editor.place();
-                if (rl.IsKeyDown(rl.KEY_R)) try editor.replace();
-                if (rl.IsKeyDown(rl.KEY_X)) try editor.remove();
-                if (rl.IsKeyPressed(rl.KEY_H) and !isShiftDown) editor.moveCursor(vec3(0, 0, 1));
-                if (rl.IsKeyPressed(rl.KEY_J) and !isShiftDown) editor.moveCursor(vec3(1, 0, 0));
-                if (rl.IsKeyPressed(rl.KEY_K) and !isShiftDown) editor.moveCursor(vec3(-1, 0, 0));
-                if (rl.IsKeyPressed(rl.KEY_L) and !isShiftDown) editor.moveCursor(vec3(0, 0, -1));
-                if (rl.IsKeyPressed(rl.KEY_U) and !isShiftDown) editor.moveCursor(vec3(0, -1, 0));
-                if (rl.IsKeyPressed(rl.KEY_I) and !isShiftDown) editor.moveCursor(vec3(0, 1, 0));
-                if (rl.IsKeyDown(rl.KEY_K) and isShiftDown) ve_rotation_target += 2;
-                if (rl.IsKeyDown(rl.KEY_J) and isShiftDown) ve_rotation_target -= 2;
-                if (rl.IsKeyDown(rl.KEY_H) and isShiftDown) ho_rotation_target -= 2;
-                if (rl.IsKeyDown(rl.KEY_L) and isShiftDown) ho_rotation_target += 2;
-                if (rl.IsKeyDown(rl.KEY_U) and isShiftDown) zoom_target += 0.2;
-                if (rl.IsKeyDown(rl.KEY_I) and isShiftDown) zoom_target -= 0.2;
+                if (keydown(rl.KEY_SPACE) or keydown(rl.KEY_F)) try editor.place();
+                if (keydown(rl.KEY_R)) try editor.replace();
+                if (keydown(rl.KEY_D) or keydown(rl.KEY_X)) try editor.remove();
+                if ((keypress(rl.KEY_H) or keypress(rl.KEY_LEFT)) and !isShiftDown) editor.moveCursor(vec3(0, 0, 1));
+                if ((keypress(rl.KEY_J) or keypress(rl.KEY_DOWN)) and !isShiftDown) editor.moveCursor(vec3(1, 0, 0));
+                if ((keypress(rl.KEY_K) or keypress(rl.KEY_UP)) and !isShiftDown) editor.moveCursor(vec3(-1, 0, 0));
+                if ((keypress(rl.KEY_L) or keypress(rl.KEY_RIGHT)) and !isShiftDown) editor.moveCursor(vec3(0, 0, -1));
+                if ((keypress(rl.KEY_U) or keypress(rl.KEY_PAGE_DOWN)) and !isShiftDown) editor.moveCursor(vec3(0, -1, 0));
+                if ((keypress(rl.KEY_I) or keypress(rl.KEY_PAGE_UP)) and !isShiftDown) editor.moveCursor(vec3(0, 1, 0));
+                if ((keydown(rl.KEY_H) or keydown(rl.KEY_LEFT)) and isShiftDown) ho_rotation_target -= 2;
+                if ((keydown(rl.KEY_J) or keydown(rl.KEY_DOWN)) and isShiftDown) ve_rotation_target -= 2;
+                if ((keydown(rl.KEY_K) or keydown(rl.KEY_UP)) and isShiftDown) ve_rotation_target += 2;
+                if ((keydown(rl.KEY_L) or keydown(rl.KEY_RIGHT)) and isShiftDown) ho_rotation_target += 2;
+                if ((keydown(rl.KEY_U) or keydown(rl.KEY_PAGE_DOWN)) and isShiftDown) zoom_target += 0.2;
+                if ((keydown(rl.KEY_I) or keydown(rl.KEY_PAGE_UP)) and isShiftDown) zoom_target -= 0.2;
                 editor.rotation = ho_rotation_target;
-                if (rl.IsKeyPressed(rl.KEY_N) and !isShiftDown) try editor.nextBuffer();
-                if (rl.IsKeyPressed(rl.KEY_N) and isShiftDown) try editor.prevBuffer();
-                if (rl.IsKeyPressed(rl.KEY_Y)) try editor.copyHovering();
-                if (rl.IsKeyPressed(rl.KEY_V)) try editor.switchVisualMode();
-                if (rl.IsKeyPressed(rl.KEY_LEFT_BRACKET)) try editor.clearMode();
-                if (rl.IsKeyPressed(rl.KEY_G)) mode = .extra;
+                if (keypress(rl.KEY_N) and !isShiftDown) try editor.nextBuffer();
+                if (keypress(rl.KEY_N) and isShiftDown) try editor.prevBuffer();
+                if (keypress(rl.KEY_Y)) try editor.copyHovering();
+                if (keypress(rl.KEY_V)) try editor.switchVisualMode();
+                if (keypress(rl.KEY_LEFT_BRACKET)) try editor.clearMode();
+                if (keypress(rl.KEY_G)) mode = .extra;
 
-                if (rl.IsKeyPressed(rl.KEY_SEMICOLON) and rl.IsKeyDown(rl.KEY_LEFT_SHIFT)) {
+                if (keypress(rl.KEY_SEMICOLON) and isShiftDown) {
                     dialog.startTextDialog();
                     mode = .dialog;
                 }
-                if (rl.IsKeyPressed(rl.KEY_C)) {
+
+                if (keypress(rl.KEY_C)) {
                     dialog.startColorPicker(editor.color);
                     mode = .dialog;
                 }
             },
             .extra => {
-                if (rl.IsKeyPressed(rl.KEY_H)) editor.rotate(vec3(1, 0, 0));
-                if (rl.IsKeyPressed(rl.KEY_J)) editor.rotate(vec3(0, 0, -1));
-                if (rl.IsKeyPressed(rl.KEY_K)) editor.rotate(vec3(0, 0, 1));
-                if (rl.IsKeyPressed(rl.KEY_L)) editor.rotate(vec3(-1, 0, 0));
+                if (keypress(rl.KEY_H)) editor.rotate(vec3(1, 0, 0));
+                if (keypress(rl.KEY_J)) editor.rotate(vec3(0, 0, -1));
+                if (keypress(rl.KEY_K)) editor.rotate(vec3(0, 0, 1));
+                if (keypress(rl.KEY_L)) editor.rotate(vec3(-1, 0, 0));
                 if (rl.GetKeyPressed() != 0) mode = .normal;
             },
             .dialog => {
