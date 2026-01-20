@@ -44,12 +44,15 @@ pub fn addVox(self: *Self, position: rl.Vector3, color: rl.Color) !void {
     }
 }
 
-pub fn writeFile(self: Self, filename: []const u8) !void {
-    const file = try std.fs.cwd().createFile(filename, .{});
-    defer file.close();
+pub fn writeFile(self: Self, io: std.Io, filename: []const u8) !void {
+    const file = try std.Io.Dir.cwd().createFile(io, filename, .{});
+    defer file.close(io);
 
-    _ = try file.write("VOX ");
-    try writeInt(file, 150);
+    var filewriter = file.writer(io, &.{});
+    var writer = &filewriter.interface;
+
+    _ = try writer.write("VOX ");
+    try writeInt(writer, 150);
 
     const box = voxBoundingBox(self.voxels.items);
     const size = [3]u32{
@@ -97,28 +100,29 @@ pub fn writeFile(self: Self, filename: []const u8) !void {
             },
         },
     };
-    try writeChunk(file, mainchunk);
+    try writeChunk(writer, mainchunk);
+    try writer.flush();
 }
 
-fn writeInt(file: std.fs.File, val: u32) !void {
-    _ = try file.write(&@as([4]u8, @bitCast(val)));
+fn writeInt(writer: *std.Io.Writer, val: u32) !void {
+    _ = try writer.write(&@as([4]u8, @bitCast(val)));
 }
 
 fn toCharArray(intarr: []const u32) []const u8 {
     return @as([]const u8, @ptrCast(intarr));
 }
 
-fn writeChunk(file: std.fs.File, chunk: Chunk) !void {
+fn writeChunk(writer: *std.Io.Writer, chunk: Chunk) !void {
     std.debug.assert(chunk.tag.len == 4);
-    _ = try file.write(chunk.tag);
-    try writeInt(file, @intCast(chunk.data.len));
+    _ = try writer.write(chunk.tag);
+    try writeInt(writer, @intCast(chunk.data.len));
 
     var children_size: usize = 0;
     for (chunk.children) |child| children_size += measureChunk(child);
-    try writeInt(file, @intCast(children_size));
+    try writeInt(writer, @intCast(children_size));
 
-    _ = try file.write(chunk.data);
-    for (chunk.children) |child| try writeChunk(file, child);
+    _ = try writer.write(chunk.data);
+    for (chunk.children) |child| try writeChunk(writer, child);
 }
 
 fn measureChunk(chunk: Chunk) usize {

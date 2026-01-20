@@ -171,6 +171,8 @@ pub fn command(self: *Self, line: []const u8) !void {
     } else if (std.mem.eql(u8, cmd, "export")) {
         const filename = it.next() orelse return CommandError.MissingArgument;
         const dot = std.mem.find(u8, filename, ".") orelse return CommandError.WrongFormat;
+        var threaded = std.Io.Threaded.init_single_threaded;
+        defer threaded.deinit();
 
         if (std.mem.eql(u8, filename[dot..], ".vox")) {
             var writer = VoxWriter.init(self.gpa);
@@ -178,14 +180,14 @@ pub fn command(self: *Self, line: []const u8) !void {
             for (self.blocks.items) |vox| {
                 try writer.addVox(vox.pos, vox.color);
             }
-            try writer.writeFile(filename);
+            try writer.writeFile(threaded.io(), filename);
         } else if (std.mem.eql(u8, filename[dot..], ".gltf")) {
-            var writer = GltfWriter.init(self.gpa);
-            defer writer.deinit();
-            for (self.blocks.items) |vox| {
-                try writer.addVox(vox.pos, vox.color);
-            }
-            try writer.writeFile(filename);
+            // var writer = GltfWriter.init(self.gpa);
+            // defer writer.deinit();
+            // for (self.blocks.items) |vox| {
+            //     try writer.addVox(vox.pos, vox.color);
+            // }
+            // try writer.writeFile(filename);
         } else return CommandError.NotImplemented;
     } else if (std.mem.eql(u8, cmd, "load")) {
         const filename = it.next() orelse return CommandError.MissingArgument;
@@ -196,6 +198,7 @@ pub fn command(self: *Self, line: []const u8) !void {
         }
 
         var threaded = std.Io.Threaded.init_single_threaded;
+        defer threaded.deinit();
         const voxels = try VoxLoader.load(self.gpa, threaded.io(), filename);
         defer voxels.deinit();
 
